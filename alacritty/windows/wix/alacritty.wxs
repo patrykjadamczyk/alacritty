@@ -30,6 +30,8 @@
         <DirectoryRef Id="AlacrittyProgramFiles">
             <Component Id="AlacrittyExe" Guid="*">
                 <File Id="AlacrittyExeFile" Source=".\target\release\alacritty.exe" Name="alacritty.exe" KeyPath="yes"/>
+                <File Id="AlacrittyOpenConsoleFile" Source=".\target\release\OpenConsole.exe" Name="OpenConsole.exe" KeyPath="yes"/>
+                <File Id="AlacrittyConptyFile" Source=".\target\release\conpty.dll" Name="conpty.dll" KeyPath="yes"/>
             </Component>
         </DirectoryRef>
 

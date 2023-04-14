@@ -42,9 +42,16 @@ jobs:
         run: cargo build --release
       - name: Upload portable executable
         run: |
-          cp ./target/release/alacritty.exe ./Alacritty-${GITHUB_REF##*/}-portable.exe
+          cp ./alacritty/windows/conpty.dll ./target/release/conpty.dll
+          cp ./alacritty/windows/OpenConsole.exe ./target/release/OpenConsole.exe
+          mkdir ./target/release/Alacritty-${GITHUB_REF##*/}-portable
+          cp ./target/release/alacritty.exe ./target/release/Alacritty-${GITHUB_REF##*/}-portable/Alacritty.exe
+          cp ./target/release/conpty.dll ./target/release/Alacritty-${GITHUB_REF##*/}-portable/conpty.dll
+          cp ./target/release/OpenConsole.exe ./target/release/Alacritty-${GITHUB_REF##*/}-portable/OpenConsole.exe
+          tar.exe -a -c -f ./target/release/Alacritty-${GITHUB_REF##*/}-portable.zip ./target/release/Alacritty-${GITHUB_REF##*/}-portable
+#          cp ./target/release/alacritty.exe ./Alacritty-${GITHUB_REF##*/}-portable.exe
           ./.github/workflows/upload_asset.sh \
-            ./Alacritty-${GITHUB_REF##*/}-portable.exe $GITHUB_TOKEN
+            ./Alacritty-${GITHUB_REF##*/}-portable.zip $GITHUB_TOKEN
       - name: Install WiX
         run: nuget install WiX
       - name: Crate msi installer
