@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="windows-1252"?>
 <Wix xmlns="http://schemas.microsoft.com/wix/2006/wi" xmlns:util="http://schemas.microsoft.com/wix/UtilExtension">
-    <Product Name="Alacritty" Id="*" UpgradeCode="87c21c74-dbd5-4584-89d5-46d9cd0c40a7" Language="1033" Codepage="1252" Version="0.13.0-dev" Manufacturer="Alacritty">
+    <Product Name="Alacritty" Id="*" UpgradeCode="87c21c74-dbd5-4584-89d5-46d9cd0c40a7" Language="1033" Codepage="1252" Version="0.13.0.0" Manufacturer="Alacritty">
         <Package InstallerVersion="200" Compressed="yes" InstallScope="perMachine"/>
         <MajorUpgrade AllowSameVersionUpgrades="yes" DowngradeErrorMessage="A newer version of [ProductName] is already installed."/>
         <Icon Id="AlacrittyIco" SourceFile=".\alacritty\windows\alacritty.ico"/>
@@ -11,6 +11,8 @@
 
         <Feature Id="ProductFeature" Title="ConsoleApp" Level="1">
             <ComponentRef Id="AlacrittyExe"/>
+            <ComponentRef Id="AlacrittyOpenConsole"/>
+            <ComponentRef Id="AlacrittyConpty"/>
             <ComponentRef Id="AlacrittyShortcut"/>
             <ComponentRef Id="ModifyPathEnv"/>
             <ComponentRef Id="ContextMenu"/>
@@ -30,7 +32,11 @@
         <DirectoryRef Id="AlacrittyProgramFiles">
             <Component Id="AlacrittyExe" Guid="*">
                 <File Id="AlacrittyExeFile" Source=".\target\release\alacritty.exe" Name="alacritty.exe" KeyPath="yes"/>
+            </Component>
+            <Component Id="AlacrittyOpenConsole" Guid="*">
                 <File Id="AlacrittyOpenConsoleFile" Source=".\target\release\OpenConsole.exe" Name="OpenConsole.exe" KeyPath="yes"/>
+            </Component>
+            <Component Id="AlacrittyConpty" Guid="*">
                 <File Id="AlacrittyConptyFile" Source=".\target\release\conpty.dll" Name="conpty.dll" KeyPath="yes"/>
             </Component>
         </DirectoryRef>

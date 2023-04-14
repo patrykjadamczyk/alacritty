@@ -1,0 +1,109 @@
+name: Build
+
+on: [push, pull_request]
+
+env:
+  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  CARGO_TERM_COLOR: always
+
+jobs:
+  macos:
+    runs-on: macos-11
+
+    steps:
+      - uses: actions/checkout@v3
+      - name: Install ARM target
+        run: rustup update && rustup target add aarch64-apple-darwin
+      - name: Test
+        run: cargo test --release
+      - name: Build ARM
+        run: cargo build --release --target=aarch64-apple-darwin
+      - name: Make DMG
+        run: make dmg-universal
+      - name: Move Application for Upload
+        run: |
+          mv ./target/release/osx/Alacritty.dmg ./Alacritty.dmg
+      - name: Upload Application
+        uses: actions/upload-artifact@v3
+        with:
+          name: Alacritty.dmg
+          path: ./Alacritty.dmg
+
+  windows:
+    runs-on: windows-latest
+
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - uses: actions/checkout@v3
+      - name: Test
+        run: cargo test --release
+      - name: Build
+        run: cargo build --release
+      - name: Make portable executable package folder
+        run: |
+          cp ./alacritty/windows/conpty.dll ./target/release/conpty.dll
+          cp ./alacritty/windows/OpenConsole.exe ./target/release/OpenConsole.exe
+          mkdir ./target/release/Alacritty-portable
+          cp ./target/release/alacritty.exe ./target/release/Alacritty-portable/Alacritty.exe
+          cp ./target/release/conpty.dll ./target/release/Alacritty-portable/conpty.dll
+          cp ./target/release/OpenConsole.exe ./target/release/Alacritty-portable/OpenConsole.exe
+      - name: Compress portable executable package
+        run: |
+          cd ./target/release
+          tar -czf ../../Alacritty-portable.gz Alacritty-portable
+          cd ../..
+      - name: Upload portable executable package
+        uses: actions/upload-artifact@v3
+        with:
+          name: Alacritty-portable.gz
+          path: ./Alacritty-portable.gz
+      - name: Install WiX
+        run: nuget install wix -Version 3.11.2
+      - name: Create msi installer
+        run: |
+          ./WiX.*/tools/candle.exe -nologo -arch "x64" -ext WixUIExtension -ext WixUtilExtension \
+            -out "./alacritty.wixobj" "alacritty/windows/wix/alacritty.wxs"
+          ./WiX.*/tools/light.exe -nologo -ext WixUIExtension -ext WixUtilExtension \
+            -out "./Alacritty-installer.msi" -sice:ICE61 -sice:ICE91 \
+            "./alacritty.wixobj"
+      - name: Upload msi installer
+        uses: actions/upload-artifact@v3
+        with:
+          name: Alacritty-installer.msi
+          path: ./Alacritty-installer.msi
+
+  linux:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v3
+      - name: Install dependencies
+        run: |
+          sudo apt-get install cmake pkg-config libfreetype6-dev libfontconfig1-dev \
+            libxcb-xfixes0-dev libxkbcommon-dev python3
+      - name: Test
+        run: cargo test --release
+      - name: Gzip manpage
+        run: |
+          gzip -c "./extra/alacritty.man" > "./alacritty.1.gz"
+          gzip -c "./extra/alacritty-msg.man" > "./alacritty-msg.1.gz"
+      - name: Prepare to upload Assets
+        run: |
+          mv ./extra/logo/alacritty-term.svg ./Alacritty.svg
+      - name: Upload Assets
+        uses: actions/upload-artifact@v3
+        with:
+          name: Alacritty-Linux
+          path: |
+            ./Alacritty.svg
+            ./alacritty.1.gz
+            ./alacritty-msg.1.gz
+            ./extra/completions/alacritty.bash
+            ./extra/completions/alacritty.fish
+            ./extra/completions/_alacritty
+            ./extra/linux/Alacritty.desktop
+            ./extra/alacritty.info
+            ./alacritty.yml
