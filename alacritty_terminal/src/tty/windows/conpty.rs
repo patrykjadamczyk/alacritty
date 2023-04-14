@@ -4,15 +4,19 @@ use std::{mem, ptr};
 
 use mio_anonymous_pipes::{EventedAnonRead, EventedAnonWrite};
 
-use windows_sys::core::PWSTR;
+use windows_sys::core::{PWSTR, HRESULT};
 use windows_sys::Win32::Foundation::{HANDLE, S_OK};
 use windows_sys::Win32::System::Console::{
-    ClosePseudoConsole, CreatePseudoConsole, ResizePseudoConsole, COORD, HPCON,
+    // ClosePseudoConsole, CreatePseudoConsole, ResizePseudoConsole,
+    COORD, HPCON,
 };
 use windows_sys::Win32::System::Threading::{
     CreateProcessW, InitializeProcThreadAttributeList, UpdateProcThreadAttribute,
     EXTENDED_STARTUPINFO_PRESENT, PROCESS_INFORMATION, PROC_THREAD_ATTRIBUTE_PSEUDOCONSOLE,
     STARTF_USESTDHANDLES, STARTUPINFOEXW, STARTUPINFOW,
+};
+use windows_sys::Win32::System::LibraryLoader::{
+    GetModuleHandleA, GetProcAddress, LoadLibraryA
 };
 
 use crate::config::PtyConfig;
@@ -20,9 +24,43 @@ use crate::event::{OnResize, WindowSize};
 use crate::tty::windows::child::ChildExitWatcher;
 use crate::tty::windows::{cmdline, win32_string, Pty};
 
+#[allow(non_snake_case)]
+struct ConptyApi {
+    CreatePseudoConsole:
+        unsafe extern "system" fn(COORD, HANDLE, HANDLE, u32, *mut HPCON) -> HRESULT,
+    ResizePseudoConsole: unsafe extern "system" fn(HPCON, COORD) -> HRESULT,
+    ClosePseudoConsole: unsafe extern "system" fn(HPCON),
+}
+
+impl ConptyApi {
+    /// Load the API or None if it cannot be found.
+    pub fn new() -> Option<Self> {
+        // Unsafe because windows API calls.
+        unsafe {
+            let mut hmodule = LoadLibraryA("conpty.dll\0".as_ptr() as _);
+            if hmodule == 0x0 {
+                // Otherwise just use the standard conpty from kernel32.
+                hmodule = GetModuleHandleA("kernel32\0".as_ptr() as _);
+            }
+            assert!(hmodule != 0x0);
+
+            let cpc = GetProcAddress(hmodule, "CreatePseudoConsole\0".as_ptr() as _);
+            let rpc = GetProcAddress(hmodule, "ResizePseudoConsole\0".as_ptr() as _);
+            let clpc = GetProcAddress(hmodule, "ClosePseudoConsole\0".as_ptr() as _);
+
+            Some(Self {
+                CreatePseudoConsole: mem::transmute(cpc),
+                ResizePseudoConsole: mem::transmute(rpc),
+                ClosePseudoConsole: mem::transmute(clpc),
+            })
+        }
+    }
+}
+
 /// RAII Pseudoconsole.
 pub struct Conpty {
     pub handle: HPCON,
+    api: ConptyApi,
 }
 
 impl Drop for Conpty {
@@ -31,7 +69,8 @@ impl Drop for Conpty {
         // conout pipe has already been dropped by this point.
         //
         // See PR #3084 and https://docs.microsoft.com/en-us/windows/console/closepseudoconsole.
-        unsafe { ClosePseudoConsole(self.handle) }
+        // unsafe { ClosePseudoConsole(self.handle) }
+        unsafe { (self.api.ClosePseudoConsole)(self.handle) }
     }
 }
 
@@ -39,6 +78,7 @@ impl Drop for Conpty {
 unsafe impl Send for Conpty {}
 
 pub fn new(config: &PtyConfig, window_size: WindowSize) -> Option<Pty> {
+    let api: ConptyApi = ConptyApi::new()?;
     let mut pty_handle: HPCON = 0;
 
     // Passing 0 as the size parameter allows the "system default" buffer
@@ -50,7 +90,7 @@ pub fn new(config: &PtyConfig, window_size: WindowSize) -> Option<Pty> {
 
     // Create the Pseudo Console, using the pipes.
     let result = unsafe {
-        CreatePseudoConsole(
+        (api.CreatePseudoConsole)(
             window_size.into(),
             conin_pty_handle.into_raw_handle() as HANDLE,
             conout_pty_handle.into_raw_handle() as HANDLE,
@@ -158,7 +198,8 @@ pub fn new(config: &PtyConfig, window_size: WindowSize) -> Option<Pty> {
     let conout = EventedAnonRead::new(conout);
 
     let child_watcher = ChildExitWatcher::new(proc_info.hProcess).unwrap();
-    let conpty = Conpty { handle: pty_handle as HPCON };
+    // let conpty = Conpty { handle: pty_handle as HPCON };
+    let conpty = Conpty { handle: pty_handle as HPCON, api };
 
     Some(Pty::new(conpty, conout, conin, child_watcher))
 }
@@ -170,7 +211,8 @@ fn panic_shell_spawn() {
 
 impl OnResize for Conpty {
     fn on_resize(&mut self, window_size: WindowSize) {
-        let result = unsafe { ResizePseudoConsole(self.handle, window_size.into()) };
+        // let result = unsafe { ResizePseudoConsole(self.handle, window_size.into()) };
+        let result = unsafe { (self.api.ResizePseudoConsole)(self.handle, window_size.into()) };
         assert_eq!(result, S_OK);
     }
 }
